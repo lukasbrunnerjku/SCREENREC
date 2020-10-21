@@ -67,7 +67,8 @@ class VideoCapture(threading.Thread):
 class AudioCapture(threading.Thread):
     """
     To record audio set the stereo mixer 
-    as the default recording device.
+    as the default recording device. If audio is
+    to quite then set higher volume in the stereo mixer.
     """
 
     def __init__(self, **kwargs):
@@ -101,8 +102,7 @@ class AudioCapture(threading.Thread):
 
         info = self.audio.get_host_api_info_by_index(0)
         numdevices = info.get('deviceCount')
-        device_names = []
-        device_id = None
+
         for i in range(0, numdevices):
             if self.audio.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels') > 0:
                 device_name = self.audio.get_device_info_by_host_api_device_index(0, i).get('name')
@@ -157,29 +157,36 @@ def merge(video_capture, audio_capture, **kwargs):
     # re-encode it to the expected fps
     audio_file = os.path.join(audio_capture.folder, audio_capture.filename + audio_capture.extension)
     video_file = os.path.join(video_capture.folder, video_capture.filename + video_capture.extension)
-
+    video_file2 = os.path.join(video_capture.folder, video_capture.filename + '2' + video_capture.extension)
     out_file = os.path.join(video_capture.folder, filename + video_capture.extension)
 
+    ffmpeg = os.path.abspath(kwargs['ffmpeg_path'])
     if abs(recorded_fps - video_capture.fps) >= 0.01:    
-        print("re-encoding")
-        ffmpeg = os.path.abspath(kwargs['ffmpeg_path'])
-        video_file2 = os.path.join(video_capture.folder, video_capture.filename + '2' + video_capture.extension)
-        cmd = f"{ffmpeg} -r {recorded_fps} -i {video_file} -pix_fmt yuv420p -r {video_capture.fps} {video_file2}"
+        print('re-encoding')
+        cmd = f'{ffmpeg} -r {recorded_fps} -i {video_file} -pix_fmt yuv420p -r {video_capture.fps} {video_file2}'
         subprocess.call(cmd, shell=True)
 
         print('muxing')
-        cmd = f"{ffmpeg} -ac 2 -channel_layout stereo -i {audio_file} -i {video_file2} -pix_fmt yuv420p {out_file}"
+        cmd = f'{ffmpeg} -ac 2 -channel_layout stereo -i {audio_file} -i {video_file2} -pix_fmt yuv420p {out_file}'
         subprocess.call(cmd, shell=True)
     else:
         print('normal recording and muxing')
-        cmd = f"{ffmpeg} -ac 2 -channel_layout stereo -i {audio_file} -i {video_file} -pix_fmt yuv420p {out_file}"
+        cmd = f'{ffmpeg} -ac 2 -channel_layout stereo -i {audio_file} -i {video_file} -pix_fmt yuv420p {out_file}'
         subprocess.call(cmd, shell=True)
+
+    # delete intermediate files
+    os.remove(audio_file)
+    os.remove(video_file)
+    try:
+        os.remove(video_file2)
+    except:
+        pass
 
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('filename', type=str)  # final recording result name
-    parser.add_argument('--exit_key', type=str, default='q')
+    parser.add_argument('--exit_key', type=str, default='s')
     parser.add_argument('--ffmpeg_path', type=str, default='./ffmpeg/bin/ffmpeg.exe')
     parser.add_argument('--output_dir', type=str, default='./output')
 
@@ -187,7 +194,7 @@ if __name__ == '__main__':
 
     if len(args.exit_key) != 1:
         print('invalid exit key set! exit key will be set to: q')
-        args.exit_key = 'q'
+        args.exit_key = 's'
 
     p = args.ffmpeg_path
     if not os.path.exists(p):
